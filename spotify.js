@@ -1,60 +1,39 @@
 require('dotenv').config();
+const express = require('express');
 const axios = require('axios');
 const qs = require('qs');
-const express = require('express');
-const passport = require('passport');
-const SpotifyStrategy = require('passport-spotify').Strategy;
-const session = require('express-session');
 
 const app = express();
 
-app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true }));
-app.use(passport.initialize());
-app.use(passport.session());
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+// rest of your code...
+const REDIRECT_URI = 'http://localhost:8888/callback';
+const scopes = 'user-library-read';
 
-passport.serializeUser((user, done) => {
-  done(null, user);
+let access_token = null;
+
+app.get('/login', (req, res) => {
+  res.redirect('https://accounts.spotify.com/authorize' +
+    '?response_type=code' +
+    '&client_id=' + SPOTIFY_CLIENT_ID +
+    '&scope=' + encodeURIComponent(scopes) +
+    '&redirect_uri=' + encodeURIComponent(REDIRECT_URI));
 });
 
-passport.deserializeUser((obj, done) => {
-  done(null, obj);
-});
+app.get('/callback', async (req, res) => {
+  const code = req.query.code || null;
 
-passport.use(new SpotifyStrategy({
-    clientID: process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-    callbackURL: 'http://localhost:3000/auth/spotify/callback'
-  },
-  (accessToken, refreshToken, expires_in, profile, done) => {
-    // You can store the access token, refresh token, and profile in your database here
-    return done(null, profile);
-  }
-));
-
-app.get('/auth/spotify', passport.authenticate('spotify'));
-
-app.get('/auth/spotify/callback',
-  passport.authenticate('spotify', { failureRedirect: '/login' }),
-  (req, res) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
-  }
-);
-
-app.listen(3000);
-
-const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env;
-
-const getAccessToken = async () => {
   try {
     const { data } = await axios({
       url: 'https://accounts.spotify.com/api/token',
       method: 'post',
-      params: {
-        grant_type: 'client_credentials'
-      },
+      data: qs.stringify({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: REDIRECT_URI
+      }),
       headers: {
-        'Accept':'application/json',
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       auth: {
@@ -63,15 +42,48 @@ const getAccessToken = async () => {
       }
     });
 
-    return data.access_token;
+    access_token = data.access_token;
+    res.send('Successfully authenticated, you can now visit /tracks');
   } catch (err) {
     console.error(err);
+    res.send('Error getting access token');
   }
-};
+});
 
-const main = async () => {
-  const accessToken = await getAccessToken();
-  console.log('Access Token:', accessToken);
-};
+app.get('/tracks', async (req, res) => {
+    if (!access_token) {
+      res.send('Not authenticated, please visit /login');
+      return;
+    }
+  
+    let offset = 0;
+    let tracks = [];
+    let hasNextPage = true;
+  
+    while (hasNextPage) {
+      try {
+        const { data } = await axios({
+          url: `https://api.spotify.com/v1/me/tracks?offset=${offset}`,
+          method: 'get',
+          headers: {
+            'Authorization': `Bearer ${access_token}`,
+            'Accept':'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+  
+        tracks = [...tracks, ...data.items.map(item => item.track.name)];
+  
+        hasNextPage = data.next !== null;
+        offset += data.limit;
+      } catch (err) {
+        console.error(err);
+        res.send('Error getting tracks');
+        return;
+      }
+    }
+  
+    res.send(tracks);
+  });
 
-main();
+app.listen(8888);
