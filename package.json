@@ -1,0 +1,21 @@
+{
+  "name": "trackguardian",
+  "version": "1.0.0",
+  "description": "TrackGuardian is a powerful and intuitive application designed to enhance your music playlist management experience. With a focus on safeguarding and organizing individual tracks, TrackGuardian offers a range of features to elevate your music library.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "passport": "^0.7.0",
+    "passport-spotify": "^2.0.0",
+    "qs": "^6.11.2"
+  }
+}
