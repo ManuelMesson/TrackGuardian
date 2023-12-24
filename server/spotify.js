@@ -1,3 +1,4 @@
+// server/spotify.js
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -7,36 +8,41 @@ const qs = require('qs');
 const app = express();
 app.use(cors());
 
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env;
 const REDIRECT_URI = 'http://localhost:8888/callback';
 const scopes = 'user-library-read';
 
-let access_token = null;
+let accessToken = null;
+
+const spotifyApi = axios.create({
+  baseURL: 'https://accounts.spotify.com',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded'
+  }
+});
 
 const constructAuthUrl = () => {
-  return `https://accounts.spotify.com/authorize?response_type=code&client_id=${SPOTIFY_CLIENT_ID}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const queryParams = qs.stringify({
+    response_type: 'code',
+    client_id: SPOTIFY_CLIENT_ID,
+    scope: scopes,
+    redirect_uri: REDIRECT_URI
+  });
+  return `${spotifyApi.defaults.baseURL}/authorize?${queryParams}`;
 };
 
 const fetchAccessToken = async (code) => {
-  const { data } = await axios({
-    url: 'https://accounts.spotify.com/api/token',
-    method: 'post',
-    data: qs.stringify({
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: REDIRECT_URI
-    }),
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
+  const response = await spotifyApi.post('/api/token', qs.stringify({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: REDIRECT_URI
+  }), {
     auth: {
       username: SPOTIFY_CLIENT_ID,
       password: SPOTIFY_CLIENT_SECRET
     }
   });
-
-  return data.access_token;
+  accessToken = response.data.access_token;
 };
 
 app.get('/login', (req, res) => {
@@ -44,79 +50,70 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-  const code = req.query.code;
-
+  const { code } = req.query;
   if (!code) {
-    res.status(400).send('Error: Missing authorization code');
-    return;
+    return res.status(400).send('Error: Missing authorization code');
   }
 
   try {
-    access_token = await fetchAccessToken(code);
-    res.send('Successfully authenticated, you can now visit /tracks');
-  } catch (err) {
-    console.error(err);
+    await fetchAccessToken(code);
+    res.redirect('http://localhost:3000');
+  } catch (error) {
+    console.error('Error getting access token:', error);
     res.status(500).send('Error getting access token');
   }
 });
 
 app.get('/tracks', async (req, res) => {
-  if (!access_token) {
-    res.send('Not authenticated, please visit /login');
-    return;
+  if (!accessToken) {
+    return res.status(401).send('Not authenticated, please visit /login');
   }
 
-  let offset = 0;
-  let tracks = [];
-  let hasNextPage = true;
+  try {
+    const spotifyUserApi = axios.create({
+      baseURL: 'https://api.spotify.com/v1',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
 
-  while (hasNextPage) {
-    try {
-      const { data } = await axios({
-        url: `https://api.spotify.com/v1/me/tracks?offset=${offset}`,
-        method: 'get',
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'Accept':'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
+    let offset = parseInt(req.query.page) * 20 || 0; // Assuming a default page size of 20
+    let tracks = [];
+    let hasNextPage = true;
 
-      tracks = [...tracks, ...data.items.map(item => item.track.name)];
+    // Fetch only one page of results
+    const response = await spotifyUserApi.get(`/me/tracks?limit=20&offset=${offset}`);
+    tracks = response.data.items.map(item => item.track);
+    hasNextPage = response.data.next !== null;
 
-      hasNextPage = data.next !== null;
-      offset += data.limit;
-    } catch (err) {
-      console.error(err);
-      res.send('Error getting tracks');
-      return;
-    }
+    res.json({ tracks, nextPage: hasNextPage ? offset / 20 + 1 : null });
+  } catch (error) {
+    console.error('Error getting tracks:', error);
+    res.status(500).send('Error getting tracks');
   }
-
-  res.send(tracks);
 });
 
 app.get('/logout', (req, res) => {
-  access_token = null;
+  accessToken = null;
   res.send('Successfully logged out, you can now visit /login');
 });
 
-app.get('/isLoggedIn', (req, res) => {
-    if (!access_token) {
-      return res.json({ isLoggedIn: false });
-    }
-  
-    axios.get('https://api.spotify.com/v1/me', {
-      headers: { 'Authorization': 'Bearer ' + access_token }
-    })
-    .then(response => {
-      // If the request was successful, the access token is valid
-      res.json({ isLoggedIn: true });
-    })
-    .catch(error => {
-      // If the request failed, the access token is not valid
-      res.json({ isLoggedIn: false });
-    });
-  });
+app.get('/isLoggedIn', async (req, res) => {
+  if (!accessToken) {
+    return res.json({ isLoggedIn: false });
+  }
 
-app.listen(8888);
+  try {
+    await axios.get('https://api.spotify.com/v1/me', {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    res.json({ isLoggedIn: true });
+  } catch (error) {
+    res.json({ isLoggedIn: false });
+  }
+});
+
+const PORT = process.env.PORT || 8888;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

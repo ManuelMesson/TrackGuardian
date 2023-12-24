@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { CircularProgress, List, ListItem, Typography, Container, Box, Grid } from '@mui/material';
+// spotify-login/src/LikedTracks.js
+import React from 'react';
+import { CircularProgress, List, ListItem, Typography, Container, Box, Grid, Backdrop } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import { styled } from '@mui/system';
+import { useInfiniteQuery } from 'react-query';
+import { useInView } from 'react-intersection-observer';
 
 const StyledListItem = styled(ListItem)({
   backgroundColor: '#f5f5f5',
@@ -9,34 +12,36 @@ const StyledListItem = styled(ListItem)({
   borderRadius: '5px',
 });
 
-const LikedTracks = () => {
-  const [tracks, setTracks] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+const StyledBackdrop = styled(Backdrop)(({ theme }) => ({
+  zIndex: theme.zIndex.drawer + 1,
+  color: '#fff',
+}));
 
-  useEffect(() => {
-    const fetchTracks = async () => {
-      try {
-        const response = await fetch('http://localhost:8888/tracks');
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        setTracks(data);
-      } catch (error) {
-        console.error('Error:', error);
-        setError(error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTracks();
-  }, []);
-
-  if (isLoading) {
-    return <CircularProgress />;
+const fetchTracks = async ({ pageParam = 0 }) => {
+  const response = await fetch(`http://localhost:8888/tracks?page=${pageParam}`);
+  if (!response.ok) {
+    throw new Error('Network response was not ok');
   }
+  return response.json();
+};
+
+const LikedTracks = () => {
+  const [ref, inView] = useInView();
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isLoading,
+  } = useInfiniteQuery('tracks', fetchTracks, {
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+  });
+
+  React.useEffect(() => {
+    if (inView && hasNextPage) {
+      fetchNextPage();
+    }
+  }, [inView, hasNextPage, fetchNextPage]);
 
   if (error) {
     return <Alert severity="error">{error.message}</Alert>;
@@ -44,15 +49,21 @@ const LikedTracks = () => {
 
   return (
     <Container>
+      <StyledBackdrop open={isLoading}>
+        <CircularProgress color="inherit" />
+      </StyledBackdrop>
       <Grid container justifyContent="center">
         <Grid item xs={12} sm={8} md={6}>
           <Box sx={{ color: '#3f51b5' }}>
             <Typography variant="h4" gutterBottom>Liked Tracks</Typography>
             <List>
-              {tracks.map((track, index) => (
-                <StyledListItem key={index}>
-                  <Typography variant="body1">{track.name}</Typography>
-                </StyledListItem>
+              {data?.pages?.map((page, i) => (
+                page.tracks.map((track, index) => (
+                  <StyledListItem ref={index === page.tracks.length - 1 ? ref : null} key={index}>
+                    <Typography variant="h6" gutterBottom>{track.name}</Typography>
+                    <Typography variant="subtitle1" color="textSecondary">{`by ${track.artists[0].name}`}</Typography>
+                  </StyledListItem>
+                ))
               ))}
             </List>
           </Box>
