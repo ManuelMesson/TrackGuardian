@@ -1,9 +1,11 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const cors = require('cors');
 const qs = require('qs');
 
 const app = express();
+app.use(cors());
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
@@ -98,5 +100,23 @@ app.get('/logout', (req, res) => {
   access_token = null;
   res.send('Successfully logged out, you can now visit /login');
 });
+
+app.get('/isLoggedIn', (req, res) => {
+    if (!access_token) {
+      return res.json({ isLoggedIn: false });
+    }
+  
+    axios.get('https://api.spotify.com/v1/me', {
+      headers: { 'Authorization': 'Bearer ' + access_token }
+    })
+    .then(response => {
+      // If the request was successful, the access token is valid
+      res.json({ isLoggedIn: true });
+    })
+    .catch(error => {
+      // If the request failed, the access token is not valid
+      res.json({ isLoggedIn: false });
+    });
+  });
 
 app.listen(8888);
