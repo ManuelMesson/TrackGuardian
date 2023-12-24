@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import Button from 'react-bootstrap/Button';
-import LikedTracks from './LikedTracks'; // Make sure to import the LikedTracks component
+import Button from '@mui/material/Button';
+import LikedTracks from './LikedTracks';
+import Grid from '@mui/material/Grid';
+import Container from '@mui/material/Container';
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -24,14 +26,16 @@ const App = () => {
   }
 
   return (
-    <div className="App" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#282c34' }}>
-      <header className="App-header">
-        <Button onClick={handleLogin} variant="success" size="lg">
-          Login with Spotify
-        </Button>
-      </header>
-    </div>
+    <Container>
+      <Grid container justifyContent="center" alignItems="center" style={{ minHeight: '100vh' }}>
+        <Grid item xs={12} sm={8} md={6} lg={4}>
+          <Button variant="contained" color="primary" onClick={handleLogin} fullWidth>
+            Login
+          </Button>
+        </Grid>
+      </Grid>
+    </Container>
   );
-}
+};
 
 export default App;

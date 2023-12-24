@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { CircularProgress, List, ListItem, Typography, Container, Box } from '@material-ui/core';
-import Alert from '@material-ui/lab/Alert';
+import { CircularProgress, List, ListItem, Typography, Container, Box, Grid } from '@mui/material';
+import Alert from '@mui/material/Alert';
+import { styled } from '@mui/system';
+
+const StyledListItem = styled(ListItem)({
+  backgroundColor: '#f5f5f5',
+  margin: '10px 0',
+  borderRadius: '5px',
+});
 
 const LikedTracks = () => {
   const [tracks, setTracks] = useState([]);
@@ -8,54 +15,49 @@ const LikedTracks = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch('http://localhost:8888/tracks')
-      .then(response => {
+    const fetchTracks = async () => {
+      try {
+        const response = await fetch('http://localhost:8888/tracks');
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
-        return response.json();
-      })
-      .then(data => {
+        const data = await response.json();
         setTracks(data);
-        setIsLoading(false);
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error:', error);
         setError(error);
+      } finally {
         setIsLoading(false);
-      });
+      }
+    };
+
+    fetchTracks();
   }, []);
 
   if (isLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-        <CircularProgress />
-      </Box>
-    );
+    return <CircularProgress />;
   }
 
   if (error) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-        <Alert severity="error">
-          An error occurred: {error.message}
-        </Alert>
-      </Box>
-    );
+    return <Alert severity="error">{error.message}</Alert>;
   }
 
   return (
-    <Container maxWidth="sm">
-      <Typography variant="h2" align="center" gutterBottom>
-        Liked Tracks
-      </Typography>
-      <List>
-        {tracks.map((track, index) => (
-          <ListItem key={index}>
-            <Typography variant="body1">{track}</Typography>
-          </ListItem>
-        ))}
-      </List>
+    <Container>
+      <Grid container justifyContent="center">
+        <Grid item xs={12} sm={8} md={6}>
+          <Box sx={{ color: '#3f51b5' }}>
+            <Typography variant="h4" gutterBottom>Liked Tracks</Typography>
+            <List>
+              {tracks.map((track, index) => (
+                <StyledListItem key={index}>
+                  <Typography variant="body1">{track.name}</Typography>
+                </StyledListItem>
+              ))}
+            </List>
+          </Box>
+        </Grid>
+      </Grid>
     </Container>
   );
 };
