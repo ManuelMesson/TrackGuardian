@@ -4,6 +4,8 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const qs = require('qs');
+const NodeCache = require('node-cache');
+const trackCache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 
 const app = express();
 app.use(cors());
@@ -69,6 +71,13 @@ app.get('/tracks', async (req, res) => {
     return res.status(401).send('Not authenticated, please visit /login');
   }
 
+  const page = parseInt(req.query.page) || 0;
+  const cacheKey = `tracks_${page}`;
+  const cachedTracks = trackCache.get(cacheKey);
+  if (cachedTracks) {
+    return res.json({ tracks: cachedTracks, nextPage: page + 1, fromCache: true });
+  }
+
   try {
     const spotifyUserApi = axios.create({
       baseURL: 'https://api.spotify.com/v1',
@@ -79,16 +88,13 @@ app.get('/tracks', async (req, res) => {
       }
     });
 
-    let offset = parseInt(req.query.page) * 20 || 0; // Assuming a default page size of 20
-    let tracks = [];
-    let hasNextPage = true;
-
-    // Fetch only one page of results
+    const offset = page * 20; // Assuming a default page size of 20
     const response = await spotifyUserApi.get(`/me/tracks?limit=20&offset=${offset}`);
-    tracks = response.data.items.map(item => item.track);
-    hasNextPage = response.data.next !== null;
+    const tracks = response.data.items.map(item => item.track);
+    const hasNextPage = response.data.next !== null;
 
-    res.json({ tracks, nextPage: hasNextPage ? offset / 20 + 1 : null });
+    trackCache.set(cacheKey, tracks);
+    res.json({ tracks, nextPage: hasNextPage ? page + 1 : null, fromCache: false });
   } catch (error) {
     console.error('Error getting tracks:', error);
     res.status(500).send('Error getting tracks');

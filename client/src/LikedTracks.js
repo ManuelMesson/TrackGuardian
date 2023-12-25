@@ -53,7 +53,7 @@ const LikedTracks = () => {
         <CircularProgress color="inherit" />
       </StyledBackdrop>
       <Grid container justifyContent="center">
-        <Grid item xs={12} sm={8} md={6}>
+        <Grid item lg={12}>
           <Box sx={{ color: '#3f51b5' }}>
             <Typography variant="h4" gutterBottom>Liked Tracks</Typography>
             <List>
